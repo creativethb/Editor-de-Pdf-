@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creative_thb Presenter - Organizador de Apresentações</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Fonte Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- React & ReactDOM (UMD) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#0f172a', // Slate 900
+              primary: '#1e293b', // Slate 800
+              accent: '#eab308', // Yellow 500
+              accentHover: '#ca8a04', // Yellow 600
+            }
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.5s ease-out',
+            'slide-up': 'slideUp 0.5s ease-out',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            slideUp: {
+              '0%': { transform: 'translateY(20px)', opacity: '0' },
+              '100%': { transform: 'translateY(0)', opacity: '1' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    
+    /* Efeito de Vidro */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    /* Scrollbar personalizada */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .slide-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .slide-card:hover { transform: translateY(-4px); }
+    .slide-card.dragging { opacity: 0.5; transform: scale(0.95); }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "jspdf": "https://esm.sh/jspdf@^4.1.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.574.0",
+    "@hello-pangea/dnd": "https://esm.sh/@hello-pangea/dnd@^18.0.1"
+  }
+}
+</script>
+</head>
+<body class="text-slate-900 flex flex-col min-h-screen">
+  <div id="root"></div>
+
+  <!-- CÓDIGO DA APLICAÇÃO -->
+  <script type="text/babel">
+    const { useState, useCallback, useEffect } = React;
+    const { jsPDF } = window.jspdf;
+
+    // --- ÍCONES ---
+    const Icons = {
+      Layers: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      ),
+      Download: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      ),
+      Trash2: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      ),
+      Plus: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      ),
+      Sparkles: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg>
+      ),
+      ArrowDownAZ: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/></svg>
+      ),
+      UploadCloud: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+      ),
+      X: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      ),
+      GripVertical: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+      ),
+      Heart: ({ size = 24, className = "" }) => (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none" className={className}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+      )
+    };
+
+    // --- LÓGICA DO PDF ---
+    const loadImage = (url) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = url;
+        img.crossOrigin = "Anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load image from ${url}`));
+      });
+    };
+
+    const generatePDF = async (images, filename = 'Apresentacao_Creative_thb.pdf') => {
+      if (images.length === 0) return;
+
+      try {
+        const firstImgElement = await loadImage(images[0].previewUrl);
+        const imgWidth = firstImgElement.width;
+        const imgHeight = firstImgElement.height;
+        
+        if (!imgWidth || !imgHeight) throw new Error("Erro dimensoes");
+
+        const ratio = imgWidth / imgHeight;
+        const isLandscape = ratio >= 1;
+
+        // A4 Width: 297mm (L) or 210mm (P)
+        const pdfWidth = isLandscape ? 297 : 210;
+        const pdfHeight = pdfWidth / ratio;
+
+        const doc = new jsPDF({
+          orientation: isLandscape ? 'l' : 'p',
+          unit: 'mm',
+          format: [pdfWidth, pdfHeight]
+        });
+
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+          if (i > 0) doc.addPage([pdfWidth, pdfHeight], isLandscape ? 'l' : 'p');
+          const imgToDraw = (i === 0) ? firstImgElement : await loadImage(image.previewUrl);
+          doc.addImage(imgToDraw, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        }
+
+        doc.save(filename);
+      } catch (err) {
+        console.error("PDF Error:", err);
+        throw err;
+      }
+    };
+
+    // --- COMPONENTES UI ---
+
+    const Footer = () => (
+      <footer className="w-full py-8 mt-auto border-t border-slate-200 bg-white">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col items-center justify-center text-center gap-2">
+          <p className="text-slate-500 font-medium flex items-center gap-2 text-sm">
+            Idealizado e Desenvolvido por <span className="font-bold text-slate-800">Creative_thb</span>
+          </p>
+          <p className="text-xs text-slate-400">
+            O organizador de apresentações definitivo. Transforme imagens em documentos profissionais.
+          </p>
+        </div>
+      </footer>
+    );
+
+    const DropZone = ({ onFilesDrop }) => {
+      const [isDragOver, setIsDragOver] = useState(false);
+
+      const handleDrop = useCallback((e) => {
+        e.preventDefault(); e.stopPropagation();
+        setIsDragOver(false);
+        const files = Array.from(e.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+        if (files.length > 0) onFilesDrop(files);
+      }, [onFilesDrop]);
+
+      const handleFileInput = (e) => {
+        if (e.target.files) {
+          const files = Array.from(e.target.files).filter((file) => file.type.startsWith('image/'));
+          if (files.length > 0) onFilesDrop(files);
+        }
+      };
+
+      return (
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+          onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+          className={`
+            w-full h-64 rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer flex flex-col items-center justify-center p-8 text-center group relative overflow-hidden
+            ${isDragOver 
+              ? 'border-brand-accent bg-brand-accent/5 scale-[1.02]' 
+              : 'border-slate-300 bg-white hover:border-brand-accent/50 hover:bg-slate-50'}
+          `}
+        >
+          <input type="file" multiple accept="image/*" className="hidden" id="file-upload" onChange={handleFileInput} />
+          <label htmlFor="file-upload" className="flex flex-col items-center cursor-pointer w-full h-full justify-center z-10">
+            <div className={`
+              w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-all duration-300 shadow-lg
+              ${isDragOver ? 'bg-brand-accent text-white rotate-6' : 'bg-slate-100 text-slate-500 group-hover:text-brand-accent group-hover:bg-brand-accent/10'}
+            `}>
+              <Icons.UploadCloud size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Arraste suas imagens</h3>
+            <p className="text-slate-500 text-sm max-w-xs">
+              Organize seus prints ou slides e nós montamos o PDF perfeito para você.
+            </p>
+            <div className="mt-6 px-4 py-1.5 bg-slate-100 rounded-full text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              JPG • PNG • WEBP
+            </div>
+          </label>
+        </div>
+      );
+    };
+
+    const SortableSlideList = ({ items, onReorder, onRemove }) => {
+      const [draggedIndex, setDraggedIndex] = useState(null);
+
+      const onDragStart = (e, index) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = "move";
+      };
+
+      const onDragOver = (e, index) => {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === index) return;
+        
+        const newItems = [...items];
+        const draggedItem = newItems[draggedIndex];
+        newItems.splice(draggedIndex, 1);
+        newItems.splice(index, 0, draggedItem);
+        
+        onReorder(newItems);
+        setDraggedIndex(index);
+      };
+
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full animate-slide-up">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={(e) => onDragStart(e, index)}
+              onDragOver={(e) => onDragOver(e, index)}
+              onDragEnd={() => setDraggedIndex(null)}
+              className={`
+                slide-card relative bg-white rounded-xl shadow-md overflow-hidden border group cursor-grab active:cursor-grabbing
+                ${draggedIndex === index ? 'opacity-40 ring-2 ring-brand-accent' : 'border-slate-100'}
+              `}
+            >
+              {/* Header do Card */}
+              <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 bg-gradient-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="bg-black/40 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded">
+                  #{index + 1}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
+                  className="bg-red-500/80 hover:bg-red-600 text-white p-1.5 rounded-full backdrop-blur-sm transition-transform hover:scale-110"
+                  title="Remover"
+                >
+                  <Icons.X size={14} />
+                </button>
+              </div>
+
+              {/* Imagem */}
+              <div className="aspect-video relative bg-slate-100 flex items-center justify-center overflow-hidden">
+                <img src={item.previewUrl} alt={item.name} className="w-full h-full object-cover" />
+              </div>
+              
+              {/* Footer do Card */}
+              <div className="p-4 bg-white border-t border-slate-50 flex items-center gap-3">
+                <div className="text-slate-300 cursor-grab">
+                  <Icons.GripVertical size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-700 truncate">{item.name}</p>
+                  <p className="text-xs text-slate-400">Slide {index + 1}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    function App() {
+      const [images, setImages] = useState([]);
+      const [isGenerating, setIsGenerating] = useState(false);
+
+      const handleFilesDrop = (files) => {
+        // Ordenação Natural
+        const sortedFiles = [...files].sort((a, b) => 
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+
+        const newImages = sortedFiles.map((file) => ({
+          id: Math.random().toString(36).substring(7),
+          file,
+          previewUrl: URL.createObjectURL(file),
+          name: file.name,
+        }));
+        setImages((prev) => [...prev, ...newImages]);
+      };
+
+      const handleReorder = (reorderedImages) => setImages(reorderedImages);
+
+      const handleRemove = (id) => {
+        setImages((prev) => {
+          const target = prev.find((img) => img.id === id);
+          if (target) URL.revokeObjectURL(target.previewUrl);
+          return prev.filter((img) => img.id !== id);
+        });
+      };
+
+      const handleClearAll = () => {
+        if (window.confirm('Remover todos os slides?')) {
+          images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+          setImages([]);
+        }
+      };
+
+      const handleSortAll = () => {
+        setImages((prev) => {
+          return [...prev].sort((a, b) => 
+            a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+          );
+        });
+      };
+
+      const handleGeneratePDF = async () => {
+        if (images.length === 0) return;
+        setIsGenerating(true);
+        try {
+          await generatePDF(images);
+        } catch (error) {
+          console.error(error);
+          alert('Erro ao gerar PDF. Tente novamente.');
+        } finally {
+          setIsGenerating(false);
+        }
+      };
+
+      return (
+        <div className="flex flex-col min-h-screen font-sans">
+          
+          {/* HEADER PREMIUM */}
+          <header className="bg-brand-dark text-white shadow-xl sticky top-0 z-50 border-b border-slate-800">
+            <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-br from-brand-accent to-yellow-300 p-2.5 rounded-xl shadow-lg shadow-yellow-500/20 text-brand-dark">
+                  <Icons.Layers size={24} />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-white leading-tight">
+                    Creative_thb <span className="text-brand-accent">Presenter</span>
+                  </h1>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest font-medium mt-0.5">
+                    Organizador Profissional
+                  </p>
+                </div>
+              </div>
+              
+              <div className="hidden md:flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-xs font-semibold text-slate-400">STATUS</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${images.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`}></span>
+                    <span className="text-sm font-medium">{images.length > 0 ? 'Pronto para criar' : 'Aguardando arquivos'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-6xl mx-auto px-6 py-10 w-full animate-fade-in pb-32">
+            
+            {/* EMPTY STATE */}
+            {images.length === 0 && (
+              <div className="max-w-3xl mx-auto text-center mt-10">
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-800 mb-6 leading-tight">
+                  Transforme suas imagens em <br/>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-accent to-yellow-600">
+                    Apresentações Impactantes
+                  </span>
+                </h2>
+                <p className="text-slate-500 text-lg mb-12 max-w-xl mx-auto leading-relaxed">
+                  O jeito mais rápido e elegante de compilar slides. <br/>
+                  Reconhecimento inteligente de ordem e corte perfeito.
+                </p>
+                <div className="shadow-2xl rounded-2xl bg-white p-1">
+                  <DropZone onFilesDrop={handleFilesDrop} />
+                </div>
+              </div>
+            )}
+
+            {/* WORKSPACE */}
+            {images.length > 0 && (
+              <div className="space-y-8">
+                
+                {/* Toolbar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                      <Icons.Layers className="text-brand-accent" size={20} />
+                      Seus Slides
+                      <span className="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full">{images.length}</span>
+                    </h2>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button onClick={handleSortAll} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
+                      <Icons.ArrowDownAZ size={16} />
+                      <span>Reordenar (A-Z)</span>
+                    </button>
+                    
+                    <label className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer">
+                      <Icons.Plus size={16} />
+                      <span>Adicionar</span>
+                      <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => { if (e.target.files) handleFilesDrop(Array.from(e.target.files)); e.target.value = ''; }} />
+                    </label>
+
+                    <button onClick={handleClearAll} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100">
+                      <Icons.Trash2 size={16} />
+                      <span>Limpar</span>
+                    </button>
+                  </div>
+                </div>
+
+                <SortableSlideList items={images} onReorder={handleReorder} onRemove={handleRemove} />
+
+                <div className="flex justify-center mt-8">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-800 rounded-full text-sm font-medium border border-blue-100">
+                    <Icons.Sparkles size={16} />
+                    <span>Layout inteligente ativado: sem bordas brancas</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* FLOATING ACTION BAR (GLASSMORPHISM) */}
+          {images.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 glass-panel p-4 z-40 animate-slide-up">
+              <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+                <div className="hidden md:block">
+                  <p className="text-sm font-semibold text-slate-800">{images.length} Slides Selecionados</p>
+                  <p className="text-xs text-slate-500">Pronto para exportar</p>
+                </div>
+                
+                <button
+                  onClick={handleGeneratePDF}
+                  disabled={isGenerating}
+                  className={`
+                    flex-1 md:flex-none md:w-96 bg-brand-dark hover:bg-slate-800 text-white h-14 rounded-xl shadow-xl 
+                    flex items-center justify-center gap-3 font-bold text-lg transition-all transform active:scale-95 hover:shadow-2xl hover:shadow-brand-accent/20
+                    ${isGenerating ? 'opacity-80 cursor-wait' : ''}
+                  `}
+                >
+                  {isGenerating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-brand-accent rounded-full animate-spin" />
+                      <span>Processando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icons.Download size={24} className="text-brand-accent" />
+                      <span>Baixar PDF Final</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <Footer />
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
